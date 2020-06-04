@@ -21,6 +21,7 @@ const (
 	Error
 	AddClient
 	RemoveClient
+	ClientToken
 )
 
 var (
@@ -100,6 +101,17 @@ func newRemoveClient(client string) *message {
 	}
 }
 
+func newClientToken(connID int64, deadline time.Duration, proto, address string) *message {
+	return &message{
+		id:          nextid(),
+		connID:      connID,
+		deadline:    deadline.Nanoseconds() / 1000000,
+		proto:       proto,
+		address:     address,
+		messageType: ClientToken,
+	}
+}
+
 func newServerMessage(reader io.Reader) (*message, error) {
 	buf := bufio.NewReader(reader)
 
@@ -151,6 +163,12 @@ func newServerMessage(reader io.Reader) (*message, error) {
 			return nil, err
 		}
 		m.address = string(bytes)
+		m.bytes = bytes
+	} else if m.messageType == ClientToken {
+		bytes, err := ioutil.ReadAll(buf)
+		if err != nil {
+			return nil, err
+		}
 		m.bytes = bytes
 	}
 

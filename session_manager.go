@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+
 	"github.com/rancher/remotedialer/metrics"
 )
 
@@ -18,16 +19,18 @@ type sessionListener interface {
 
 type sessionManager struct {
 	sync.Mutex
-	clients   map[string][]*Session
-	peers     map[string][]*Session
-	listeners map[sessionListener]bool
+	clients    map[string][]*Session
+	peers      map[string][]*Session
+	listeners  map[sessionListener]bool
+	tokenCache *clientTokenCache
 }
 
 func newSessionManager() *sessionManager {
 	return &sessionManager{
-		clients:   map[string][]*Session{},
-		peers:     map[string][]*Session{},
-		listeners: map[sessionListener]bool{},
+		clients:    map[string][]*Session{},
+		peers:      map[string][]*Session{},
+		listeners:  map[sessionListener]bool{},
+		tokenCache: newClientTokenCache(100),
 	}
 }
 
@@ -143,4 +146,53 @@ func (sm *sessionManager) remove(s *Session) {
 	}
 
 	s.Close()
+}
+
+func (sm *sessionManager) getClientToken(clientKey string, deadline time.Duration) (*clientToken, error) {
+	var (
+		ct  *clientToken
+		err error
+	)
+
+	sm.Lock()
+	defer sm.Unlock()
+
+	if sm.tokenCache.contains(clientKey) {
+		if ct, err := sm.tokenCache.get(clientKey); err != nil {
+			return nil, err
+		} else {
+			return ct, nil
+		}
+	}
+
+	sessions := sm.clients[clientKey]
+	if len(sessions) > 0 {
+		ct, err = getClientToken(sessions[0], "")
+
+	} else {
+		for _, sessions := range sm.peers {
+			skip := false
+			for _, session := range sessions {
+				session.Lock()
+				keys := session.remoteClientKeys[clientKey]
+				session.Unlock()
+				if len(keys) > 0 {
+					ct, err = getClientToken(sessions[0], clientKey)
+					skip = true
+					break
+				}
+			}
+			if skip {
+				break
+			}
+		}
+	}
+
+	if err != nil {
+		return nil, err
+	}
+
+	sm.tokenCache.add(clientKey, *ct)
+
+	return ct, nil
 }

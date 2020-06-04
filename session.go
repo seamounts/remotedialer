@@ -130,6 +130,11 @@ func (s *Session) serveMessage(reader io.Reader) error {
 		logrus.Debug("REQUEST ", message)
 	}
 
+	if message.messageType == ClientToken {
+		s.clientToken(message)
+		return nil
+	}
+
 	if message.messageType == Connect {
 		if s.auth == nil || !s.auth(message.proto, message.address) {
 			return errors.New("connect not allowed")
@@ -230,6 +235,18 @@ func (s *Session) closeConnection(connID int64, err error) {
 
 	if conn != nil {
 		conn.tunnelClose(err)
+	}
+}
+
+func (s *Session) clientToken(message *message) {
+	conn := newConnection(message.connID, s, message.proto, message.address)
+
+	s.Lock()
+	s.conns[message.connID] = conn
+	s.Unlock()
+
+	if err := writeClientToken(conn, message); err != nil {
+		s.closeConnection(message.connID, err)
 	}
 }
 

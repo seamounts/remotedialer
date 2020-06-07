@@ -21,7 +21,7 @@ const (
 	Error
 	AddClient
 	RemoveClient
-	ClientToken
+	TokenConnect
 )
 
 var (
@@ -73,6 +73,18 @@ func newConnect(connID int64, deadline time.Duration, proto, address string) *me
 	}
 }
 
+func newTokenConnect(connID int64, deadline time.Duration, proto, address string) *message {
+	return &message{
+		id:          nextid(),
+		connID:      connID,
+		deadline:    deadline.Nanoseconds() / 1000000,
+		messageType: TokenConnect,
+		bytes:       []byte(fmt.Sprintf("%s/%s", proto, address)),
+		proto:       proto,
+		address:     address,
+	}
+}
+
 func newErrorMessage(connID int64, err error) *message {
 	return &message{
 		id:          nextid(),
@@ -101,17 +113,6 @@ func newRemoveClient(client string) *message {
 	}
 }
 
-func newClientToken(connID int64, deadline time.Duration, proto, address string) *message {
-	return &message{
-		id:          nextid(),
-		connID:      connID,
-		deadline:    deadline.Nanoseconds() / 1000000,
-		proto:       proto,
-		address:     address,
-		messageType: ClientToken,
-	}
-}
-
 func newServerMessage(reader io.Reader) (*message, error) {
 	buf := bufio.NewReader(reader)
 
@@ -137,7 +138,7 @@ func newServerMessage(reader io.Reader) (*message, error) {
 		body:        buf,
 	}
 
-	if m.messageType == Data || m.messageType == Connect {
+	if m.messageType == Data || m.messageType == Connect || m.messageType == TokenConnect {
 		deadline, err := binary.ReadVarint(buf)
 		if err != nil {
 			return nil, err
@@ -145,7 +146,7 @@ func newServerMessage(reader io.Reader) (*message, error) {
 		m.deadline = deadline
 	}
 
-	if m.messageType == Connect {
+	if m.messageType == Connect || m.messageType == TokenConnect {
 		bytes, err := ioutil.ReadAll(io.LimitReader(buf, 100))
 		if err != nil {
 			return nil, err
@@ -163,12 +164,6 @@ func newServerMessage(reader io.Reader) (*message, error) {
 			return nil, err
 		}
 		m.address = string(bytes)
-		m.bytes = bytes
-	} else if m.messageType == ClientToken {
-		bytes, err := ioutil.ReadAll(buf)
-		if err != nil {
-			return nil, err
-		}
 		m.bytes = bytes
 	}
 
@@ -203,7 +198,7 @@ func (m *message) header() []byte {
 	offset += binary.PutVarint(buf[offset:], m.id)
 	offset += binary.PutVarint(buf[offset:], m.connID)
 	offset += binary.PutVarint(buf[offset:], int64(m.messageType))
-	if m.messageType == Data || m.messageType == Connect {
+	if m.messageType == Data || m.messageType == Connect || m.messageType == TokenConnect {
 		offset += binary.PutVarint(buf[offset:], m.deadline)
 	}
 	return buf[:offset]

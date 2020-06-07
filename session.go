@@ -31,6 +31,7 @@ type Session struct {
 	pingWait         sync.WaitGroup
 	dialer           Dialer
 	client           bool
+	sm               *sessionManager
 }
 
 // PrintTunnelData No tunnel logging by default
@@ -130,8 +131,11 @@ func (s *Session) serveMessage(reader io.Reader) error {
 		logrus.Debug("REQUEST ", message)
 	}
 
-	if message.messageType == ClientToken {
-		s.clientToken(message)
+	if message.messageType == TokenConnect {
+		if s.auth == nil || !s.auth(message.proto, message.address) {
+			return errors.New("clientConnectWithToken not allowed")
+		}
+		s.clientTokenConnect(message)
 		return nil
 	}
 
@@ -216,6 +220,8 @@ func (s *Session) removeRemoteClient(address string) error {
 	if len(keys) == 0 {
 		delete(s.remoteClientKeys, clientKey)
 	}
+	// remove tokenCache
+	s.sm.tokenCache.remove(clientKey)
 
 	if PrintTunnelData {
 		logrus.Debugf("REMOVE REMOTE CLIENT %s, SESSION %d", address, s.sessionKey)
@@ -238,18 +244,6 @@ func (s *Session) closeConnection(connID int64, err error) {
 	}
 }
 
-func (s *Session) clientToken(message *message) {
-	conn := newConnection(message.connID, s, message.proto, message.address)
-
-	s.Lock()
-	s.conns[message.connID] = conn
-	s.Unlock()
-
-	if err := writeClientToken(conn, message); err != nil {
-		s.closeConnection(message.connID, err)
-	}
-}
-
 func (s *Session) clientConnect(message *message) {
 	conn := newConnection(message.connID, s, message.proto, message.address)
 
@@ -263,6 +257,51 @@ func (s *Session) clientConnect(message *message) {
 	go clientDial(s.dialer, conn, message)
 }
 
+func (s *Session) clientTokenConnect(message *message) {
+	var (
+		netConn net.Conn
+		err     error
+	)
+
+	conn := newConnection(message.connID, s, message.proto, message.address)
+	defer conn.Close()
+
+	s.Lock()
+	s.conns[message.connID] = conn
+	if PrintTunnelData {
+		logrus.Debugf("CLIENT TOKEN CONNECTIONS %d %d", s.sessionKey, len(s.conns))
+	}
+	s.Unlock()
+
+	if s.dialer != nil {
+
+		netConn, err = s.dialer(message.proto, message.address)
+		if err != nil {
+			conn.tunnelClose(err)
+			return
+		}
+
+		close := func(err error) error {
+			if err == nil {
+				err = io.EOF
+			}
+			conn.doTunnelClose(err)
+			netConn.Close()
+			return err
+		}
+		_, err = io.Copy(conn, netConn)
+		if err := close(err); err != nil {
+			conn.writeErr(err)
+		}
+
+	} else {
+		err := writeClientToken(s, conn.connID, message.deadline)
+		if err != nil {
+			s.closeConnection(conn.connID, err)
+		}
+	}
+}
+
 func (s *Session) serverConnect(deadline time.Duration, proto, address string) (net.Conn, error) {
 	connID := atomic.AddInt64(&s.nextConnID, 1)
 	conn := newConnection(connID, s, proto, address)
@@ -274,13 +313,31 @@ func (s *Session) serverConnect(deadline time.Duration, proto, address string) (
 	}
 	s.Unlock()
 
-	_, err := s.writeMessage(newConnect(connID, deadline, proto, address))
-	if err != nil {
+	if _, err := s.writeMessage(newConnect(connID, deadline, proto, address)); err != nil {
 		s.closeConnection(connID, err)
 		return nil, err
 	}
 
-	return conn, err
+	return conn, nil
+}
+
+func (s *Session) serverTokenConnect(deadline time.Duration, proto, address string) (net.Conn, error) {
+	connID := atomic.AddInt64(&s.nextConnID, 1)
+	conn := newConnection(connID, s, proto, address)
+
+	s.Lock()
+	s.conns[connID] = conn
+	if PrintTunnelData {
+		logrus.Debugf("TOKEN CONNECTIONS %d %d", s.sessionKey, len(s.conns))
+	}
+	s.Unlock()
+
+	if _, err := s.writeMessage(newTokenConnect(connID, deadline, proto, address)); err != nil {
+		s.closeConnection(connID, err)
+		return nil, err
+	}
+
+	return conn, nil
 }
 
 func (s *Session) writeMessage(message *message) (int, error) {

@@ -21,6 +21,10 @@ func (s *Server) Dial(clientKey string, deadline time.Duration, proto, address s
 	return d(proto, address)
 }
 
+func (s *Server) DialWithClientToken(clientKey string, deadline time.Duration, proto, address string) (net.Conn, error) {
+	return s.sessions.getClientTokenConn(clientKey, deadline, proto, address)
+}
+
 func (s *Server) Dialer(clientKey string, deadline time.Duration) Dialer {
 	return func(proto, address string) (net.Conn, error) {
 		return s.Dial(clientKey, deadline, proto, address)

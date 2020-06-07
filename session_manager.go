@@ -30,8 +30,12 @@ func newSessionManager() *sessionManager {
 		clients:    map[string][]*Session{},
 		peers:      map[string][]*Session{},
 		listeners:  map[sessionListener]bool{},
-		tokenCache: newClientTokenCache(100),
+		tokenCache: newClientTokenCache(1),
 	}
+}
+
+func (sm *sessionManager) setTokenCache(tokenCacheLen int) {
+	sm.tokenCache.resize(tokenCacheLen)
 }
 
 func toDialer(s *Session, prefix string, deadline time.Duration) Dialer {
@@ -39,8 +43,17 @@ func toDialer(s *Session, prefix string, deadline time.Duration) Dialer {
 		if prefix == "" {
 			return s.serverConnect(deadline, proto, address)
 		}
+
 		return s.serverConnect(deadline, prefix+"::"+proto, address)
 	}
+}
+
+func getTokenConn(s *Session, prefix string, deadline time.Duration, proto, address string) (net.Conn, error) {
+	if prefix == "" {
+		return s.serverTokenConnect(deadline, proto, address)
+	}
+
+	return s.serverTokenConnect(deadline, prefix+"::"+proto, address)
 }
 
 func (sm *sessionManager) removeListener(listener sessionListener) {
@@ -92,9 +105,33 @@ func (sm *sessionManager) getDialer(clientKey string, deadline time.Duration) (D
 	return nil, fmt.Errorf("failed to find Session for client %s", clientKey)
 }
 
+func (sm *sessionManager) getClientTokenConn(clientKey string, deadline time.Duration, proto, address string) (net.Conn, error) {
+	sm.Lock()
+	defer sm.Unlock()
+
+	sessions := sm.clients[clientKey]
+	if len(sessions) > 0 {
+		return getTokenConn(sessions[0], "", deadline, proto, address)
+	}
+
+	for _, sessions := range sm.peers {
+		for _, session := range sessions {
+			session.Lock()
+			keys := session.remoteClientKeys[clientKey]
+			session.Unlock()
+			if len(keys) > 0 {
+				return getTokenConn(session, clientKey, deadline, proto, address)
+			}
+		}
+	}
+
+	return nil, fmt.Errorf("failed to find Session for client %s", clientKey)
+}
+
 func (sm *sessionManager) add(clientKey string, conn *websocket.Conn, peer bool) *Session {
 	sessionKey := rand.Int63()
 	session := newSession(sessionKey, clientKey, conn)
+	session.sm = sm
 
 	sm.Lock()
 	defer sm.Unlock()
@@ -117,6 +154,9 @@ func (sm *sessionManager) remove(s *Session) {
 	var isPeer bool
 	sm.Lock()
 	defer sm.Unlock()
+
+	// remove client token
+	sm.tokenCache.remove(s.clientKey)
 
 	for i, store := range []map[string][]*Session{sm.clients, sm.peers} {
 		var newSessions []*Session
@@ -146,53 +186,4 @@ func (sm *sessionManager) remove(s *Session) {
 	}
 
 	s.Close()
-}
-
-func (sm *sessionManager) getClientToken(clientKey string, deadline time.Duration) (*clientToken, error) {
-	var (
-		ct  *clientToken
-		err error
-	)
-
-	sm.Lock()
-	defer sm.Unlock()
-
-	if sm.tokenCache.contains(clientKey) {
-		if ct, err := sm.tokenCache.get(clientKey); err != nil {
-			return nil, err
-		} else {
-			return ct, nil
-		}
-	}
-
-	sessions := sm.clients[clientKey]
-	if len(sessions) > 0 {
-		ct, err = getClientToken(sessions[0], "")
-
-	} else {
-		for _, sessions := range sm.peers {
-			skip := false
-			for _, session := range sessions {
-				session.Lock()
-				keys := session.remoteClientKeys[clientKey]
-				session.Unlock()
-				if len(keys) > 0 {
-					ct, err = getClientToken(sessions[0], clientKey)
-					skip = true
-					break
-				}
-			}
-			if skip {
-				break
-			}
-		}
-	}
-
-	if err != nil {
-		return nil, err
-	}
-
-	sm.tokenCache.add(clientKey, *ct)
-
-	return ct, nil
 }

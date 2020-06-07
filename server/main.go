@@ -102,7 +102,8 @@ func main() {
 		remotedialer.PrintTunnelData = true
 	}
 
-	handler := remotedialer.New(authorizer, remotedialer.DefaultErrorWriter)
+	handler := remotedialer.New(100, authorizer, remotedialer.DefaultErrorWriter)
+
 	handler.PeerToken = peerToken
 	handler.PeerID = peerID
 
@@ -118,6 +119,24 @@ func main() {
 	router.Handle("/connect", handler)
 	router.HandleFunc("/client/{id}/{scheme}/{host}{path:.*}", func(rw http.ResponseWriter, req *http.Request) {
 		Client(handler, rw, req)
+	})
+
+	router.HandleFunc("/test", func(rw http.ResponseWriter, req *http.Request) {
+		req.ParseForm()
+		cl := req.FormValue("ckuster")
+		logrus.Infoln("----cluster ", cl)
+
+		_, err := handler.GetClusterToken(cl, 15*time.Second)
+		if err != nil {
+			logrus.Errorln("1--------", err)
+		}
+
+		ct, err := handler.GetClusterToken(cl, 15*time.Second)
+		if err != nil {
+			logrus.Errorln("2--------", err)
+		}
+		logrus.Infoln("-------ct", ct)
+
 	})
 
 	fmt.Println("Listening on ", addr)

@@ -2,6 +2,9 @@ package remotedialer
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
+	"io/ioutil"
 	"net/http"
 	"sync"
 	"time"
@@ -34,13 +37,20 @@ type Server struct {
 	peerLock    sync.Mutex
 }
 
-func New(auth Authorizer, errorWriter ErrorWriter) *Server {
-	return &Server{
+func New(tokenCacheLen int, auth Authorizer, errorWriter ErrorWriter) *Server {
+
+	s := &Server{
 		peers:       map[string]peer{},
 		authorizer:  auth,
 		errorWriter: errorWriter,
 		sessions:    newSessionManager(),
 	}
+
+	if tokenCacheLen > 0 {
+		s.sessions.setTokenCache(tokenCacheLen)
+	}
+
+	return s
 }
 
 func (s *Server) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
@@ -95,4 +105,38 @@ func (s *Server) auth(req *http.Request) (clientKey string, authed, peer bool, e
 
 	id, authed, err = s.authorizer(req)
 	return id, authed, false, err
+}
+
+func (s *Server) GetClusterToken(clientKey string, deadline time.Duration) (*clientToken, error) {
+	if s.sessions.tokenCache.contains(clientKey) {
+		ct, err := s.sessions.tokenCache.get(clientKey)
+		if err != nil {
+			return nil, err
+		}
+
+		return ct, nil
+	}
+
+	conn, err := s.DialWithClientToken(clientKey, deadline, ClientTokenProto, ClientTokenAddress)
+	if err != nil {
+		return nil, err
+	}
+	defer conn.Close()
+
+	data, err := ioutil.ReadAll(conn)
+	if err != nil {
+		return nil, err
+	}
+
+	ct := &clientToken{}
+	if err := json.Unmarshal(data, ct); err != nil {
+		return nil, err
+	}
+
+	if ct.Token == "" || ct.Cacert == "" {
+		return nil, fmt.Errorf("cluster %s token or cacert not found", clientKey)
+	}
+
+	s.sessions.tokenCache.add(clientKey, *ct)
+	return ct, nil
 }

@@ -3,26 +3,23 @@ package remotedialer
 import (
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
-	"sync/atomic"
-	"time"
 
 	lru "github.com/hashicorp/golang-lru"
 	"github.com/sirupsen/logrus"
 )
 
-const (
-	ClientTokenAddress = "client-token-address"
-	ClientTokenProto   = "client-token-proto"
+var (
+	ClientTokenProto   = "TokenRegister"
+	ClientTokenAddress = "ClientTokenAddress"
 )
 
 var (
 	tokenGetter = func() (string, error) {
-		return "test", nil
+		return "testtoken", nil
 	}
 
 	cacertGetter = func() (string, error) {
-		return "test", nil
+		return "testcacert", nil
 	}
 )
 
@@ -38,12 +35,16 @@ func RegisterTokenGetter(tokenGet, cacertGet clientTokenGetter) {
 }
 
 type clientToken struct {
-	token  string
-	cacert string
+	Token  string
+	Cacert string
 }
 
-func writeClientToken(conn *connection, message *message) error {
-	defer conn.Close()
+func writeClientToken(s *Session, connID, deadline int64) error {
+	logrus.Debugln("-------writeClientToken", s.clientKey, connID)
+	var (
+		ct  *clientToken
+		err error
+	)
 
 	token, err := tokenGetter()
 	if err != nil {
@@ -55,9 +56,9 @@ func writeClientToken(conn *connection, message *message) error {
 		return err
 	}
 
-	ct := &clientToken{
-		token:  token,
-		cacert: cacert,
+	ct = &clientToken{
+		Token:  token,
+		Cacert: cacert,
 	}
 
 	ctbytes, err := json.Marshal(ct)
@@ -65,51 +66,11 @@ func writeClientToken(conn *connection, message *message) error {
 		return err
 	}
 
-	conn.Write(ctbytes)
-	if err != nil {
+	if _, err := s.writeMessage(newMessage(connID, deadline, ctbytes)); err != nil {
 		return err
 	}
 
 	return nil
-}
-
-func getClientToken(s *Session, prefix string) (*clientToken, error) {
-	connID := atomic.AddInt64(&s.nextConnID, 1)
-	conn := newConnection(connID, s, "", "")
-
-	s.Lock()
-	s.conns[connID] = conn
-	if PrintTunnelData {
-		logrus.Debugf("CONNECTIONS %d %d", s.sessionKey, len(s.conns))
-	}
-	s.Unlock()
-
-	var err error
-	if prefix == "" {
-		_, err = s.writeMessage(newClientToken(connID, 3*time.Second, ClientTokenProto, ClientTokenAddress))
-
-	} else {
-		_, err = s.writeMessage(newClientToken(connID, 3*time.Second, prefix+"::"+ClientTokenProto, ClientTokenAddress))
-	}
-
-	if err != nil {
-		s.closeConnection(connID, err)
-		return nil, err
-	}
-
-	data, err := ioutil.ReadAll(conn)
-	if err != nil {
-		s.closeConnection(connID, err)
-		return nil, err
-	}
-
-	ct := &clientToken{}
-	if err := json.Unmarshal(data, ct); err != nil {
-		s.closeConnection(connID, err)
-		return nil, err
-	}
-
-	return ct, nil
 }
 
 type clientTokenCache struct {
@@ -118,7 +79,10 @@ type clientTokenCache struct {
 }
 
 func newClientTokenCache(len int) *clientTokenCache {
-	cache, _ := lru.New(len)
+	cache, err := lru.New(len)
+	if err != nil {
+		logrus.Errorln(err)
+	}
 	return &clientTokenCache{
 		cache: cache,
 		len:   len,
@@ -147,6 +111,17 @@ func (ctc *clientTokenCache) add(key string, value clientToken) {
 	ctc.cache.Add(key, value)
 }
 
+func (ctc *clientTokenCache) remove(key string) {
+	if ctc.cache.Contains(key) {
+		logrus.Debugf("---------Remove Client %s Token Cache ", key)
+		ctc.cache.Remove(key)
+	}
+}
+
 func (ctc *clientTokenCache) contains(key string) bool {
 	return ctc.cache.Contains(key)
+}
+
+func (ctc *clientTokenCache) resize(len int) {
+	ctc.cache.Resize(len)
 }

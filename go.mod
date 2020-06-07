@@ -1,4 +1,4 @@
-module github.com/rancher/remotedialer
+module github.com/seamounts/remotedialer
 
 go 1.12
 

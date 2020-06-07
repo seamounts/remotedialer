@@ -5,7 +5,7 @@ import (
 	"flag"
 	"net/http"
 
-	"github.com/rancher/remotedialer"
+	"github.com/seamounts/remotedialer"
 	"github.com/sirupsen/logrus"
 )
 

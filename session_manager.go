@@ -9,7 +9,7 @@ import (
 
 	"github.com/gorilla/websocket"
 
-	"github.com/rancher/remotedialer/metrics"
+	"github.com/seamounts/remotedialer/metrics"
 )
 
 type sessionListener interface {

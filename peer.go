@@ -102,7 +102,7 @@ outer:
 
 		session := NewClientSession(func(string, string) bool { return true }, ws)
 		session.dialer = func(network, address string) (net.Conn, error) {
-			logrus.Debugf("Perr dialer network: [%s], address: [%s]", network, address)
+			logrus.Debugf("Peer dialer network: [%s], address: [%s]", network, address)
 			parts := strings.Split(network, "::")
 			if len(parts) != 2 {
 				return nil, fmt.Errorf("invalid clientKey/proto: %s", network)

@@ -55,7 +55,7 @@ func New(tokenCacheLen int, auth Authorizer, errorWriter ErrorWriter) *Server {
 
 func (s *Server) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	clientKey, authed, peer, err := s.auth(req)
-	logrus.Debugf("------ServeHTTP auth clientKey [%v],  authed [%v], peer [%v], [err] [%v]",
+	logrus.Debugf("ServeHTTP auth clientKey [%v],  authed [%v], peer [%v], [err] [%v]",
 		clientKey, authed, peer, err)
 
 	if err != nil {
@@ -96,15 +96,11 @@ func (s *Server) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 func (s *Server) auth(req *http.Request) (clientKey string, authed, peer bool, err error) {
 	id := req.Header.Get(ID)
 	token := req.Header.Get(Token)
-	logrus.Debugf("---------Auth id [%s], token [%s]", id, token)
 	if id != "" && token != "" {
-		logrus.Debugf("---------Auth peers [%v]", s.peers)
 		// peer authentication
 		s.peerLock.Lock()
 		p, ok := s.peers[id]
 		s.peerLock.Unlock()
-
-		logrus.Debugf("---------Auth peer ok [%v], p.token [%s], token [%s]", ok, p.token, token)
 		if ok && p.token == token {
 			return id, true, true, nil
 		}

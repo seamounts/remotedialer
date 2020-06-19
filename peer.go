@@ -78,7 +78,6 @@ func (p *peer) start(ctx context.Context, s *Server) {
 		Token:      {s.PeerToken},
 		TunnelType: {TunnelTypePeer},
 	}
-	logrus.Infof("-------peer headers %v", headers)
 
 	dialer := &websocket.Dialer{
 		TLSClientConfig: &tls.Config{

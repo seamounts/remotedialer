@@ -15,8 +15,10 @@ import (
 )
 
 var (
-	Token = "X-API-Tunnel-Token"
-	ID    = "X-API-Tunnel-ID"
+	Token          = "X-API-Tunnel-Token"
+	ID             = "X-API-Tunnel-ID"
+	TunnelType     = "X-API-Tunnel-Type"
+	TunnelTypePeer = "peer"
 )
 
 func (s *Server) AddPeer(url, id, token string) {
@@ -72,8 +74,9 @@ func (p peer) equals(other peer) bool {
 
 func (p *peer) start(ctx context.Context, s *Server) {
 	headers := http.Header{
-		ID:    {s.PeerID},
-		Token: {s.PeerToken},
+		ID:         {s.PeerID},
+		Token:      {s.PeerToken},
+		TunnelType: {TunnelTypePeer},
 	}
 
 	dialer := &websocket.Dialer{

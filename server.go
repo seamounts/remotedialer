@@ -55,6 +55,9 @@ func New(tokenCacheLen int, auth Authorizer, errorWriter ErrorWriter) *Server {
 
 func (s *Server) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	clientKey, authed, peer, err := s.auth(req)
+	logrus.Debugf("ServeHTTP auth clientKey [%s],  authed [%s], peer [%s], [err] [%s]",
+		clientKey, authed, peer, err)
+
 	if err != nil {
 		s.errorWriter(rw, req, 400, err)
 		return
@@ -74,6 +77,7 @@ func (s *Server) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 
 	wsConn, err := upgrader.Upgrade(rw, req, nil)
 	if err != nil {
+		logrus.Errorf("Error during upgrade for host [%v] [%v]\n", clientKey, err)
 		s.errorWriter(rw, req, 400, errors.Wrapf(err, "Error during upgrade for host [%v]", clientKey))
 		return
 	}

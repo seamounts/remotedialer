@@ -98,11 +98,13 @@ func (s *Server) auth(req *http.Request) (clientKey string, authed, peer bool, e
 	token := req.Header.Get(Token)
 	logrus.Debugf("---------Auth id [%s], token [%s]", id, token)
 	if id != "" && token != "" {
+		logrus.Debugf("---------Auth peers [%v]", s.peers)
 		// peer authentication
 		s.peerLock.Lock()
 		p, ok := s.peers[id]
 		s.peerLock.Unlock()
 
+		logrus.Debugf("---------Auth peer ok [%v], p.token [%s], token [%s]", ok, p.token, token)
 		if ok && p.token == token {
 			return id, true, true, nil
 		}

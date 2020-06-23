@@ -202,6 +202,7 @@ func (s *Session) addRemoteClient(address string) error {
 	}
 	keys[int(sessionKey)] = true
 
+	logrus.Infof("ADD REMOTE CLIENT %s, SESSION %d", address, s.sessionKey)
 	if PrintTunnelData {
 		logrus.Debugf("ADD REMOTE CLIENT %s, SESSION %d", address, s.sessionKey)
 	}
@@ -223,6 +224,7 @@ func (s *Session) removeRemoteClient(address string) error {
 	// remove tokenCache
 	s.sm.tokenCache.remove(clientKey)
 
+	logrus.Infof("REMOVE REMOTE CLIENT %s, SESSION %d", address, s.sessionKey)
 	if PrintTunnelData {
 		logrus.Debugf("REMOVE REMOTE CLIENT %s, SESSION %d", address, s.sessionKey)
 	}

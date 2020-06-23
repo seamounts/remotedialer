@@ -12,6 +12,19 @@ func (s *Server) HasSession(clientKey string) bool {
 	return err == nil
 }
 
+func (s *Server) CloseSession(clientKey string) {
+	sessions := s.sessions.clients[clientKey]
+	if len(sessions) == 0 {
+		return
+	}
+
+	for _, session := range sessions {
+		session.Close()
+	}
+
+	delete(s.sessions.clients, clientKey)
+}
+
 func (s *Server) Dial(clientKey string, deadline time.Duration, proto, address string) (net.Conn, error) {
 	d, err := s.sessions.getDialer(clientKey, deadline)
 	if err != nil {

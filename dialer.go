@@ -20,6 +20,7 @@ func (s *Server) CloseSession(clientKey string) {
 
 	for _, session := range sessions {
 		session.Close()
+		session.conn.conn.Close()
 	}
 
 	delete(s.sessions.clients, clientKey)

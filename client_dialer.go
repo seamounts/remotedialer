@@ -4,7 +4,6 @@ import (
 	"io"
 	"net"
 	"sync"
-	"time"
 )
 
 func clientDial(dialer Dialer, conn *connection, message *message) {
@@ -15,11 +14,12 @@ func clientDial(dialer Dialer, conn *connection, message *message) {
 		err     error
 	)
 
-	if dialer == nil {
-		netConn, err = net.DialTimeout(message.proto, message.address, time.Duration(message.deadline)*time.Millisecond)
-	} else {
-		netConn, err = dialer(message.proto, message.address)
-	}
+	// if dialer == nil {
+	// 	netConn, err = net.DialTimeout(message.proto, message.address, time.Duration(message.deadline)*time.Millisecond)
+	// } else {
+	// 	netConn, err = dialer(message.proto, message.address)
+	// }
+	netConn, err = dialer(message.proto, message.address)
 
 	if err != nil {
 		conn.tunnelClose(err)

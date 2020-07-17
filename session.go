@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+	"github.com/seamounts/remotedialer/internal/netpool"
 	"github.com/sirupsen/logrus"
 )
 
@@ -32,6 +33,8 @@ type Session struct {
 	dialer           Dialer
 	client           bool
 	sm               *sessionManager
+
+	netConnPools map[string]net.Conn
 }
 
 // PrintTunnelData No tunnel logging by default
@@ -256,7 +259,28 @@ func (s *Session) clientConnect(message *message) {
 	}
 	s.Unlock()
 
-	go clientDial(s.dialer, conn, message)
+	dialer := s.dialer
+	if dialer == nil {
+		dialer = func(network, address string) (net.Conn, error) {
+			destaddr := fmt.Sprintf("%s:%s", network, address)
+			s.Lock()
+			netconn, ok := s.netConnPools[destaddr]
+			s.Unlock()
+			if !ok {
+				netconn, err := net.DialTimeout(network, address, time.Duration(message.deadline)*time.Millisecond)
+				if err != nil {
+					return nil, err
+				}
+				s.Lock()
+				s.netConnPools[destaddr] = netpool.WrapConn(netconn)
+				s.Unlock()
+			}
+
+			return netconn, nil
+		}
+	}
+
+	go clientDial(dialer, conn, message)
 }
 
 func (s *Session) clientTokenConnect(message *message) {
@@ -360,6 +384,16 @@ func (s *Session) Close() {
 	}
 
 	s.conns = map[int64]*connection{}
+
+	for _, netconn := range s.netConnPools {
+		if pc, ok := netconn.(*netpool.NetConn); ok {
+			pc.MarkUnusable()
+			pc.Close()
+		} else {
+			netconn.Close()
+		}
+	}
+	s.netConnPools = map[string]net.Conn{}
 }
 
 func (s *Session) sessionAdded(clientKey string, sessionKey int64) {

@@ -143,6 +143,7 @@ func (s *Session) serveMessage(reader io.Reader) error {
 	}
 
 	if message.messageType == Connect {
+		fmt.Println("--------------messageType", message.messageType, message.connID, message.Err())
 		if s.auth == nil || !s.auth(message.proto, message.address) {
 			return errors.New("connect not allowed")
 		}
@@ -177,6 +178,7 @@ func (s *Session) serveMessage(reader io.Reader) error {
 			s.closeConnection(message.connID, err)
 		}
 	case Error:
+		fmt.Println("--------------messageType", message.messageType, message.connID, message.Err())
 		s.closeConnection(message.connID, message.Err())
 	}
 

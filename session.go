@@ -259,28 +259,28 @@ func (s *Session) clientConnect(message *message) {
 	}
 	s.Unlock()
 
-	dialer := s.dialer
-	if dialer == nil {
-		dialer = func(network, address string) (net.Conn, error) {
-			destaddr := fmt.Sprintf("%s:%s", network, address)
-			s.Lock()
-			netconn, ok := s.netConnPools[destaddr]
-			s.Unlock()
-			if !ok {
-				netconn, err := net.DialTimeout(network, address, time.Duration(message.deadline)*time.Millisecond)
-				if err != nil {
-					return nil, err
-				}
-				s.Lock()
-				s.netConnPools[destaddr] = netpool.WrapConn(netconn)
-				s.Unlock()
-			}
+	// dialer := s.dialer
+	// if dialer == nil {
+	// 	dialer = func(network, address string) (net.Conn, error) {
+	// 		destaddr := fmt.Sprintf("%s:%s", network, address)
+	// 		s.Lock()
+	// 		netconn, ok := s.netConnPools[destaddr]
+	// 		s.Unlock()
+	// 		if !ok {
+	// 			netconn, err := net.DialTimeout(network, address, time.Duration(message.deadline)*time.Millisecond)
+	// 			if err != nil {
+	// 				return nil, err
+	// 			}
+	// 			s.Lock()
+	// 			s.netConnPools[destaddr] = netpool.WrapConn(netconn)
+	// 			s.Unlock()
+	// 		}
 
-			return netconn, nil
-		}
-	}
+	// 		return netconn, nil
+	// 	}
+	// }
 
-	go clientDial(dialer, conn, message)
+	go clientDial(s.dialer, conn, message)
 }
 
 func (s *Session) clientTokenConnect(message *message) {

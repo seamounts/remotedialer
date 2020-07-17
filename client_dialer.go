@@ -50,13 +50,18 @@ func pipe(client *connection, server net.Conn) {
 
 	go func() {
 		defer wg.Done()
-		_, err := io.Copy(server, client)
-		fmt.Println("1--------pipe client close")
+		fmt.Println("1--------pipe server start")
+		_, err := io.Copy(client, server)
+
+		// _, err := io.Copy(server, client)
+		fmt.Println("2--------pipe server close")
 		close(err)
 	}()
 
-	_, err := io.Copy(client, server)
-	fmt.Println("1--------pipe server close")
+	// _, err := io.Copy(client, server)
+	fmt.Println("1--------pipe client start")
+	_, err := io.Copy(server, client)
+	fmt.Println("2--------pipe client close")
 	err = close(err)
 	wg.Wait()
 

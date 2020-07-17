@@ -22,7 +22,8 @@ func clientDial(dialer Dialer, conn *connection, message *message) {
 	} else {
 		netConn, err = dialer(message.proto, message.address)
 	}
-	// netConn, err = dialer(message.proto, message.address)
+	fmt.Println("1--------clientDial time deadline", message.deadline)
+	netConn.SetDeadline(time.Now().Add(time.Duration(message.deadline) * time.Millisecond))
 
 	if err != nil {
 		conn.tunnelClose(err)
@@ -50,18 +51,15 @@ func pipe(client *connection, server net.Conn) {
 
 	go func() {
 		defer wg.Done()
-		fmt.Println("1--------pipe server start")
-		_, err := io.Copy(client, server)
-
-		// _, err := io.Copy(server, client)
-		fmt.Println("2--------pipe server close")
+		fmt.Println("1--------pipe client start")
+		_, err := io.Copy(server, client)
+		fmt.Println("2--------pipe client close")
 		close(err)
 	}()
 
-	// _, err := io.Copy(client, server)
-	fmt.Println("1--------pipe client start")
-	_, err := io.Copy(server, client)
-	fmt.Println("2--------pipe client close")
+	fmt.Println("1--------pipe server start")
+	_, err := io.Copy(client, server)
+	fmt.Println("2--------pipe server close")
 	err = close(err)
 	wg.Wait()
 

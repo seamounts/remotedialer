@@ -23,7 +23,8 @@ func clientDial(dialer Dialer, conn *connection, message *message) {
 		netConn, err = dialer(message.proto, message.address)
 	}
 	fmt.Println("1--------clientDial time deadline", message.deadline)
-	// netConn.SetDeadline(time.Now().Add(time.Duration(message.deadline) * time.Millisecond))
+	netConn.SetDeadline(time.Now().Add(time.Duration(message.deadline) * time.Millisecond))
+
 	if err != nil {
 		conn.tunnelClose(err)
 		return

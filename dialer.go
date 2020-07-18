@@ -44,7 +44,3 @@ func (s *Server) Dialer(clientKey string, deadline time.Duration) Dialer {
 		return s.Dial(clientKey, deadline, proto, address)
 	}
 }
-
-func (s *Server) GetConn() {
-
-}
